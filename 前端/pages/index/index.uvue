@@ -1,0 +1,450 @@
+<template>
+  <view class="home">
+    <!-- 顶部栏 -->
+    <view class="header">
+      <text class="app-name">{{ appName }}</text>
+      <button class="history-btn" @click="goToHistory">
+        <image src="/static/icon-clock.png" class="icon" />
+      </button>
+    </view>
+
+    <!-- 主打卡按钮和激励语 -->
+    <view class="main-content">
+      <view class="punch-btn-box">
+        <button
+          class="punch-btn"
+          :disabled="hasPunched"
+          :class="{ punched: hasPunched }"
+          @click="handlePunch"
+        >
+          <template v-if="!hasPunched">今日打卡</template>
+          <template v-else>已打卡 √<br />{{ punchTime }}</template>
+        </button>
+      </view>
+      <view class="motivation">{{ motivationText }}</view>
+    </view>
+
+    <!-- 日历组件 -->
+    <view class="calendar-box">
+      <view class="calendar-header">
+        <text>{{ monthLabel }}</text>
+        <text class="stat">本月已打卡 {{ punchedDays }} 天</text>
+      </view>
+      <view class="calendar">
+        <view class="calendar-row calendar-week">
+          <text v-for="w in weekDays" :key="w" class="calendar-week-text">{{ w }}</text>
+        </view>
+        <view
+          v-for="(row, i) in calendarRows"
+          :key="i"
+          class="calendar-row"
+        >
+          <view
+            v-for="(day, j) in row"
+            :key="j"
+            class="calendar-day"
+            :class="{ punched: day?.punched, today: day?.date === today }"
+            @click="day && showDayDetail(day)"
+          >
+            <text v-if="day">{{ day.day }}</text>
+            <image
+              v-if="day && day.punched"
+              src="/static/icon-check.png"
+              class="calendar-icon"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+function normalizeDate(str) {
+  if (!str) return '';
+  return str.replace(/[.\/]/g, '-').slice(0, 10);
+}
+
+export default {
+  data() {
+    return {
+      appName: "健身打卡助手",
+      hasPunched: false,
+      punchTime: "",
+      motivationText: "每一次坚持，都是进步！",
+      today: '',
+      calendarData: [],
+      weekDays: ["日", "一", "二", "三", "四", "五", "六"],
+      goalPlans: [],
+      punchedDates: [],
+      userId: ''
+    };
+  },
+  computed: {
+    monthLabel() {
+      return this.today.slice(0, 7);
+    },
+    punchedDays() {
+      const month = this.monthLabel + "-";
+      return this.calendarData.filter(
+        d => d.punched && d.date.startsWith(month)
+      ).length;
+    },
+    calendarRows() {
+      const days = this.getMonthDays(this.today);
+      return this.chunkArray(days, 7);
+    }
+  },
+  created() {
+    this.today = this.getToday();
+    const user = uni.getStorageSync('user');
+    if (user && user.username) {
+      this.userId = user.username;
+      this.loadGoalPlans();
+      this.loadPunchStatus();
+    } else {
+      uni.showToast({ title: '请先登录', icon: 'none' });
+      uni.redirectTo({ url: '/pages/login/login' });
+    }
+    this.initCalendarData();
+  },
+  methods: {
+    goToHistory() {
+      uni.navigateTo({ url: "/pages/history/history" });
+    },
+    handlePunch() {
+      // 查找今日计划（支持单日或区间包含today的计划）
+      const todayPlans = this.goalPlans.filter(plan => {
+        if (!plan.start) return false;
+        const planStart = normalizeDate(plan.start);
+        const planEnd = plan.end ? normalizeDate(plan.end) : planStart;
+        const start = new Date(planStart);
+        const end = new Date(planEnd);
+        const today = new Date(this.today);
+        if (isNaN(start) || isNaN(end)) return false;
+        return today >= start && today <= end;
+      });
+      if (todayPlans.length === 0) {
+        uni.showToast({ title: "尚未创建今日训练计划", icon: "none" });
+        return;
+      }
+      if (this.hasPunched) {
+        uni.showToast({ title: "今日已打卡", icon: "none" });
+        return;
+      }
+      // 打卡（后端POST打卡）
+      uni.request({
+        url: 'http://127.0.0.1:5000/api/punch',
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: { user_id: this.userId, date: this.today },
+        success: (res) => {
+          if (res.data && res.data.msg === '打卡成功') {
+            this.hasPunched = true;
+            this.punchTime = this.getNowTime();
+            this.punchedDates.push(this.today);
+            this.initCalendarData();
+            uni.showToast({ title: "打卡成功！", icon: "success" });
+          } else if (res.data && res.data.msg) {
+            uni.showToast({ title: res.data.msg, icon: "none" });
+          }
+        },
+        fail: () => {
+          uni.showToast({ title: "打卡失败", icon: "none" });
+        }
+      });
+    },
+    showDayDetail(day) {
+      const dateStr = day.date;
+      const plans = this.goalPlans.filter(plan => {
+        if (!plan.start) return false;
+        const planStart = normalizeDate(plan.start);
+        const planEnd = plan.end ? normalizeDate(plan.end) : planStart;
+        const start = new Date(planStart);
+        const end = new Date(planEnd);
+        const d = new Date(dateStr);
+        if (isNaN(start) || isNaN(end)) return false;
+        return d >= start && d <= end;
+      });
+      if (plans.length === 0) {
+        uni.showModal({
+          title: "打卡详情",
+          content: "该日未创建训练计划",
+          showCancel: false
+        });
+        return;
+      }
+      let content =
+        "训练计划：\n" +
+        plans
+          .map(
+            p =>
+              `${p.project} ${p.amount}${p.unit}` +
+              (p.remark ? `\n备注：${p.remark}` : "")
+          )
+          .join("\n\n");
+      if (day.punched) {
+        content += `\n\n打卡状态：已打卡`;
+      } else {
+        content += `\n\n打卡状态：未打卡`;
+      }
+      uni.showModal({
+        title: "打卡详情",
+        content,
+        showCancel: false
+      });
+    },
+    getToday() {
+      const d = new Date();
+      return `${d.getFullYear()}-${(d.getMonth() + 1)
+        .toString()
+        .padStart(2, "0")}-${d
+        .getDate()
+        .toString()
+        .padStart(2, "0")}`;
+    },
+    getNowTime() {
+      const d = new Date();
+      return `${d.getHours().toString().padStart(2, "0")}:${d
+        .getMinutes()
+        .toString()
+        .padStart(2, "0")}`;
+    },
+    getMonthDays(dateStr) {
+      const [year, month] = dateStr.split("-").map(Number);
+      const first = new Date(year, month - 1, 1);
+      const last = new Date(year, month, 0);
+      const days = [];
+      const startDay = first.getDay();
+      for (let i = 0; i < startDay; i++) days.push(null);
+      for (let d = 1; d <= last.getDate(); d++) {
+        const date = `${year}-${month.toString().padStart(2, "0")}-${d
+          .toString()
+          .padStart(2, "0")}`;
+        let punched = false;
+        if (this.punchedDates.includes(date)) punched = true;
+        days.push({ date, day: d, punched });
+      }
+      return days;
+    },
+    chunkArray(arr, size) {
+      const res = [];
+      for (let i = 0; i < arr.length; i += size) {
+        res.push(arr.slice(i, i + size));
+      }
+      return res;
+    },
+    initCalendarData() {
+      // 生成本月日历数据
+      const today = this.today;
+      const [year, month] = today.split("-").map(Number);
+      const lastDay = new Date(year, month, 0).getDate();
+      const arr = [];
+      for (let d = 1; d <= lastDay; d++) {
+        const date = `${year}-${month.toString().padStart(2, "0")}-${d
+          .toString()
+          .padStart(2, "0")}`;
+        arr.push({ date, punched: this.punchedDates.includes(date) });
+      }
+      this.calendarData = arr;
+    },
+    // punchDates改为后端接口
+    loadPunchStatus() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/punch?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          this.punchedDates = res.data && Array.isArray(res.data.punchDates)
+            ? res.data.punchDates : [];
+          if (this.punchedDates.includes(this.today)) {
+            this.hasPunched = true;
+            this.punchTime = "已打卡";
+          } else {
+            this.hasPunched = false;
+            this.punchTime = "";
+          }
+          this.initCalendarData();
+        },
+        fail: () => {
+          this.punchedDates = [];
+          this.hasPunched = false;
+          this.punchTime = "";
+        }
+      });
+    },
+    loadGoalPlans() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/goals?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          const plans = res.data && Array.isArray(res.data.goals) ? res.data.goals : [];
+          plans.forEach(plan => {
+            plan.start = normalizeDate(plan.start);
+            if (plan.end) plan.end = normalizeDate(plan.end);
+          });
+          this.goalPlans = plans;
+        },
+        fail: () => {
+          this.goalPlans = [];
+        }
+      });
+    }
+  },
+  watch: {
+    goalPlans() {
+      this.loadPunchStatus();
+      this.initCalendarData();
+    }
+  },
+  onShow() {
+    this.loadGoalPlans();
+    this.loadPunchStatus();
+    this.initCalendarData();
+  }
+};
+</script>
+
+<style scoped>
+.home {
+  background: #f5f5f5;
+  min-height: 100vh;
+  font-family: "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 16px;
+  background: #00bfaf;
+  color: #fff;
+}
+.app-name {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+.history-btn {
+  background: none;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 191, 174, 0.12);
+  border-radius: 50%;
+  padding: 0;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon {
+  width: 24px;
+  height: 24px;
+}
+.main-content {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.punch-btn-box {
+  margin: 32px 0 8px 0;
+  display: flex;
+  justify-content: center;
+}
+.punch-btn {
+  width: 140px;
+  height: 140px;
+  border-radius: 70px;
+  background: linear-gradient(180deg, #00bfaf 0%, #26c6da 100%);
+  color: #fff;
+  font-size: 22px;
+  font-weight: bold;
+  box-shadow: 0 6px 24px rgba(0, 191, 174, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: 0.2s;
+  line-height: 1.2;
+  border: none;
+}
+.punch-btn.punched {
+  background: #bbb;
+  opacity: 0.7;
+  color: #fff;
+  box-shadow: none;
+}
+.motivation {
+  text-align: center;
+  font-size: 16px;
+  color: #26c6da;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+.calendar-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 16px 0 16px;
+  box-shadow: 0 2px 8px rgba(0, 191, 174, 0.08);
+}
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.stat {
+  color: #00bfaf;
+  font-weight: 500;
+  font-size: 14px;
+}
+.calendar {
+  width: 100%;
+}
+.calendar-row {
+  display: flex;
+  flex-direction: row;
+  margin: 2px 0;
+}
+.calendar-week {
+  font-weight: 600;
+  color: #888;
+}
+.calendar-week-text {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+}
+.calendar-day {
+  flex: 1;
+  height: 38px;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 2px 0;
+  font-size: 16px;
+  color: #222;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.calendar-day.punched {
+  background: #e0f7f5;
+  color: #00bfaf;
+  font-weight: bold;
+  border: 1.5px solid #00bfaf;
+}
+.calendar-day.today {
+  border: 2px solid #ff9800;
+}
+.calendar-icon {
+  width: 14px;
+  height: 14px;
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+}
+</style>

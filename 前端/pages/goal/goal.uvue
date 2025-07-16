@@ -1,0 +1,541 @@
+<template>
+  <view class="goal-page">
+    <!-- 体重目标 -->
+    <view class="weight-target-row">
+      <view class="weight-target-btn" @click="showWeightPanel = true">
+        <template v-if="targetWeight">
+          目标体重 <text class="weight-number">{{ targetWeight }}</text>（kg）
+        </template>
+        <template v-else>
+          目标体重（kg）
+        </template>
+      </view>
+    </view>
+
+    <!-- 创建计划按钮 -->
+    <view class="goal-header">
+      <view class="create-btn" @click="openEditPanel()">+ 创建计划</view>
+    </view>
+
+    <!-- 计划列表 -->
+    <view v-if="plans.length === 0" class="empty-tip">
+      暂无运动计划，点击“创建计划”开始吧！
+    </view>
+    <view v-for="plan in sortedPlans" :key="plan.id" class="plan-bubble">
+      <view class="plan-date">
+        {{ formatDate(plan.start) + (plan.end ? ' - ' + formatDate(plan.end) : '') }}
+      </view>
+      <view class="plan-brief">
+        {{ plan.project }} {{ plan.amount }}{{ plan.unit }}
+        <text v-if="plan.remark" class="plan-remark">备注：{{ plan.remark }}</text>
+      </view>
+      <view class="progress-box">
+        <view class="progress-bar-bg">
+          <view
+            class="progress-bar-fg"
+            :style="{
+              width: (getProgress(plan) * 100).toFixed(0) + '%',
+              background: getProgress(plan) === 1 ? '#26C6DA' : '#00BFAE'
+            }"
+          ></view>
+        </view>
+        <text class="progress-num">{{ (getProgress(plan) * 100).toFixed(0) }}%</text>
+        <image
+          v-if="getProgress(plan) === 1"
+          src="/static/icon-check.png"
+          class="progress-check"
+        />
+      </view>
+      <view class="plan-actions">
+        <view class="action-btn" @click="openEditPanel(plan)">编辑</view>
+        <view class="action-btn delete" @click="deletePlan(plan.id)">删除</view>
+      </view>
+    </view>
+
+    <!-- 创建/编辑计划弹窗 -->
+    <view v-if="showEditPanel" class="edit-panel-mask">
+      <view class="edit-panel">
+        <view class="panel-title">{{ editPlan.id ? '编辑计划' : '创建计划（每日）' }}</view>
+        <view class="panel-item">
+          <text>开始日期</text>
+          <input type="date" v-model="editPlan.start" />
+        </view>
+        <view class="panel-item">
+          <text>结束日期（可选）</text>
+          <input type="date" v-model="editPlan.end" />
+        </view>
+        <view class="panel-item">
+          <text>运动项目</text>
+          <picker :range="projectList" v-model="editPlan.projectIndex" @change="onProjectChange">
+            <view class="picker">{{ projectList[editPlan.projectIndex] }}</view>
+          </picker>
+        </view>
+        <view class="panel-item">
+          <text>数量</text>
+          <input v-model="editPlan.amount" type="number" placeholder="如 5" />
+        </view>
+        <view class="panel-item">
+          <text>单位</text>
+          <view class="unit-select">{{ getUnitByProject(editPlan.projectIndex) }}</view>
+        </view>
+        <view class="panel-item">
+          <text>备注</text>
+          <input v-model="editPlan.remark" placeholder="如 晚饭后" />
+        </view>
+        <view class="panel-btns">
+          <view class="panel-btn save" @click="submitPlan">保存</view>
+          <view class="panel-btn cancel" @click="closeEditPanel">取消</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 目标体重弹窗 -->
+    <view v-if="showWeightPanel" class="edit-panel-mask">
+      <view class="edit-panel">
+        <view class="panel-title">设置目标体重</view>
+        <view class="panel-item">
+          <text>目标体重（kg）</text>
+          <input v-model="tempWeight" type="number" placeholder="请输入目标体重" />
+        </view>
+        <view class="panel-btns">
+          <view class="panel-btn save" @click="saveWeight">保存</view>
+          <view class="panel-btn cancel" @click="showWeightPanel = false">取消</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+const PROJECTS = [
+  { name: '跑步', unit: 'km' },
+  { name: '跳绳', unit: '个' },
+  { name: '仰卧起坐', unit: '个' },
+  { name: '深蹲', unit: '个' }
+];
+
+function normalizeDate(str) {
+  return str ? str.replace(/[.\/]/g, '-').slice(0, 10) : '';
+}
+
+export default {
+  data() {
+    return {
+      plans: [],
+      showEditPanel: false,
+      editPlan: {
+        id: null,
+        start: '',
+        end: '',
+        project: PROJECTS[0].name,
+        projectIndex: 0,
+        amount: '',
+        unit: PROJECTS[0].unit,
+        remark: ''
+      },
+      projectList: PROJECTS.map(p => p.name),
+      showWeightPanel: false,
+      tempWeight: '',
+      targetWeight: '',
+      userId: ''
+    };
+  },
+  computed: {
+    sortedPlans() {
+      return [...this.plans].sort((a, b) => new Date(a.start) - new Date(b.start));
+    }
+  },
+  mounted() {
+    const user = uni.getStorageSync('user');
+    if (user && user.username) {
+      this.userId = user.username;
+      this.fetchPlans();
+      this.fetchWeight();
+    } else {
+      uni.showToast({ title: '请先登录', icon: 'none' });
+      uni.redirectTo({ url: '/pages/login/login' });
+    }
+  },
+  methods: {
+    fetchPlans() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/goals?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          if (res.data && Array.isArray(res.data.goals)) {
+            this.plans = res.data.goals.map(plan => {
+              plan.start = normalizeDate(plan.start);
+              if (plan.end) plan.end = normalizeDate(plan.end);
+              return plan;
+            });
+          } else {
+            this.plans = [];
+          }
+        },
+        fail: () => {
+          uni.showToast({ title: '获取计划失败', icon: 'none' });
+        }
+      });
+    },
+    fetchWeight() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/weight?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          if (res.data && res.data.weight) {
+            this.targetWeight = res.data.weight;
+          }
+        }
+      });
+    },
+    openEditPanel(plan = null) {
+      if (plan) {
+        this.editPlan = {
+          ...plan,
+          projectIndex: this.projectList.indexOf(plan.project),
+        };
+      } else {
+        this.editPlan = {
+          id: null,
+          start: '',
+          end: '',
+          project: this.projectList[0],
+          projectIndex: 0,
+          amount: '',
+          unit: this.getUnitByProject(0),
+          remark: ''
+        };
+      }
+      this.showEditPanel = true;
+    },
+    closeEditPanel() {
+      this.showEditPanel = false;
+    },
+    submitPlan() {
+      const { start, amount, projectIndex } = this.editPlan;
+      if (!start || !amount) {
+        uni.showToast({ title: '请填写完整信息', icon: 'none' });
+        return;
+      }
+      const plan = {
+        ...this.editPlan,
+        start: normalizeDate(this.editPlan.start),
+        end: this.editPlan.end ? normalizeDate(this.editPlan.end) : '',
+        project: this.projectList[this.editPlan.projectIndex],
+        unit: this.getUnitByProject(this.editPlan.projectIndex),
+        amount: this.editPlan.amount,
+        user_id: this.userId,
+      };
+      uni.request({
+        url: 'http://127.0.0.1:5000/api/goals',
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: plan,
+        success: (res) => {
+          uni.showToast({ title: res.data && res.data.msg ? res.data.msg : '保存成功', icon: 'success' });
+          this.fetchPlans();
+          this.closeEditPanel();
+        },
+        fail: () => {
+          uni.showToast({ title: '保存失败', icon: 'none' });
+        }
+      });
+    },
+    deletePlan(id) {
+      uni.showModal({
+        title: '提示',
+        content: '确定删除该计划？',
+        success: res => {
+          if (res.confirm) {
+            uni.request({
+              url: `http://127.0.0.1:5000/api/goals/${id}`,
+              method: 'DELETE',
+              data: { user_id: this.userId },
+              header: { 'Content-Type': 'application/json' },
+              success: (res) => {
+                uni.showToast({ title: res.data && res.data.msg ? res.data.msg : '删除成功', icon: 'success' });
+                this.fetchPlans();
+              },
+              fail: () => {
+                uni.showToast({ title: '删除失败', icon: 'none' });
+              }
+            });
+          }
+        }
+      });
+    },
+    getUnitByProject(idx) {
+      return PROJECTS[idx]?.unit || '';
+    },
+    saveWeight() {
+      if (!this.tempWeight || Number(this.tempWeight) <= 0) {
+        uni.showToast({ title: '请输入合理体重', icon: 'none' });
+        return;
+      }
+      uni.request({
+        url: 'http://127.0.0.1:5000/api/weight',
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: {
+          user_id: this.userId,
+          weight: this.tempWeight
+        },
+        success: (res) => {
+          this.targetWeight = this.tempWeight;
+          uni.showToast({ title: res.data && res.data.msg ? res.data.msg : '保存成功', icon: 'success' });
+          this.showWeightPanel = false;
+        },
+        fail: () => {
+          uni.showToast({ title: '保存失败', icon: 'none' });
+        }
+      });
+    },
+    onProjectChange(e) {
+      this.editPlan.projectIndex = e.detail.value;
+      this.editPlan.project = this.projectList[this.editPlan.projectIndex];
+      this.editPlan.unit = this.getUnitByProject(this.editPlan.projectIndex);
+    },
+    formatDate(date) {
+      if (!date) return '';
+      const d = new Date(date);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+  }
+};
+</script>
+
+<style scoped>
+.goal-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #e0f7fa 0%, #f5f5f5 100%);
+  padding: 0 12px 32px;
+  box-sizing: border-box;
+}
+.weight-target-row {
+  display: flex;
+  align-items: center;
+  margin: 20px 0 10px 0;
+}
+.weight-target-btn {
+  background: #fff;
+  color: #00BFAE;
+  border-radius: 18px;
+  padding: 6px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border: 1.5px solid #00BFAE;
+  box-shadow: 0 2px 8px rgba(0,191,174,0.08);
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+.weight-number {
+  color: #ff9800;
+  font-size: 21px;
+  font-weight: bold;
+  margin: 0 3px;
+  letter-spacing: 1px;
+}
+.goal-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.create-btn {
+  background: linear-gradient(90deg, #00BFAE 0%, #26C6DA 100%);
+  color: #fff;
+  border-radius: 18px;
+  padding: 6px 26px;
+  font-size: 16px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,191,174,0.12);
+  border: none;
+  text-align: center;
+}
+.empty-tip {
+  color: #aaa;
+  text-align: center;
+  margin: 36px 0 16px 0;
+  font-size: 15px;
+}
+.plan-bubble {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 4px 16px rgba(0,191,174,0.09);
+  margin-bottom: 18px;
+  padding: 18px 16px 14px 16px;
+  position: relative;
+  border-left: 6px solid #00BFAE;
+  animation: fadein 0.7s;
+}
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.plan-date {
+  font-size: 15px;
+  color: #00BFAE;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+.plan-brief {
+  font-size: 17px;
+  color: #222;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+}
+.plan-remark {
+  margin-top: 5px;
+  color: #26C6DA;
+  font-size: 13px;
+}
+.progress-box {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  margin-top: 2px;
+}
+.progress-bar-bg {
+  width: 54vw;
+  max-width: 220px;
+  height: 12px;
+  background: #e0f7f5;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-right: 12px;
+  position: relative;
+}
+.progress-bar-fg {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.3s;
+}
+.progress-num {
+  color: #00BFAE;
+  font-size: 14px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.progress-check {
+  width: 15px;
+  height: 15px;
+  margin-left: 2px;
+}
+.plan-actions {
+  position: absolute;
+  right: 12px;
+  top: 16px;
+  display: flex;
+  gap: 6px;
+}
+.action-btn {
+  background: #e0f7f5;
+  color: #00BFAE;
+  padding: 2px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  border: none;
+  font-weight: 500;
+  margin-left: 2px;
+}
+.action-btn.delete {
+  background: #ffeaea;
+  color: #ff5b5b;
+}
+.edit-panel-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(34, 34, 34, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99;
+}
+.edit-panel {
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 20px;
+  min-width: 270px;
+  box-shadow: 0 4px 24px rgba(0, 191, 174, 0.13);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.panel-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  text-align: center;
+  color: #00BFAE;
+  letter-spacing: 1.5px;
+}
+.panel-item {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+}
+.panel-item text {
+  font-size: 15px;
+  color: #555;
+  margin-bottom: 4px;
+}
+.picker {
+  border: 1px solid #eee;
+  border-radius: 6px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 15px;
+  color: #222;
+  display: flex;
+  align-items: center;
+  background: #fafafa;
+}
+.unit-select {
+  border: none;
+  font-size: 15px;
+  color: #222;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  background: #fafafa;
+  padding-left: 6px;
+}
+.panel-item input {
+  border: 1px solid #eee;
+  border-radius: 6px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 15px;
+  color: #222;
+}
+.panel-btns {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.panel-btn {
+  flex: 1;
+  margin: 0 4px;
+  border-radius: 10px;
+  padding: 8px 0;
+  font-size: 16px;
+  text-align: center;
+}
+.panel-btn.save {
+  background: linear-gradient(90deg, #00BFAE 0%, #26C6DA 100%);
+  color: #fff;
+  font-weight: bold;
+}
+.panel-btn.cancel {
+  background: #e0f7f5;
+  color: #00BFAE;
+  font-weight: bold;
+}
+</style>

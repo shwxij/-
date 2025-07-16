@@ -1,0 +1,555 @@
+<template>
+  <view class="user-center">
+    <!-- 顶部资料 -->
+    <view class="profile-card">
+      <view class="profile-avatar-area">
+        <image class="avatar" :src="avatar" @click="chooseAvatar" />
+      </view>
+      <view class="nickname">{{ nickname }}</view>
+      <view class="edit-btn" @click="showEditName = true">编辑</view>
+      <view class="signature" v-if="signature">{{ signature }}</view>
+    </view>
+    
+    <!-- 成就列表 -->
+    <view class="achievements" v-if="achievements.length > 0">
+      <view class="achievement" v-for="(achievement, index) in achievements" :key="index">
+        <view class="achievement-badge">
+          <image class="badge-image" :src="getBadgeImage(achievement.title)" />
+        </view>
+        <view class="achievement-title">{{ achievement.title }}</view>
+        <view class="achievement-description">{{ achievement.description }}</view>
+        <view class="achievement-date">达成于: {{ achievement.date }}</view>
+      </view>
+    </view>
+    <view class="no-achievements" v-else>
+      暂无成就，加油完成更多目标！
+    </view>
+    
+    <!-- 统计卡片区 -->
+    <view class="stats-wrap">
+      <view class="stat-card">
+        <view class="stat-num">{{ stats.days }}</view>
+        <view class="stat-label">累计打卡天数</view>
+      </view>
+      <view class="stat-card">
+        <view class="stat-num">{{ stats.streak }}</view>
+        <view class="stat-label">连续打卡天数</view>
+      </view>
+      <view class="stat-card">
+        <view class="stat-num">{{ stats.duration }}</view>
+        <view class="stat-label">累计锻炼时长(h)</view>
+      </view>
+      <view class="stat-card">
+        <view class="stat-num">{{ stats.bestStreak }}</view>
+        <view class="stat-label">最长连续天数</view>
+      </view>
+    </view>
+    
+    <!-- 设置区 -->
+    <view class="settings">
+      <view class="setting-item" @click="showEditName = true">
+        <uni-icons type="compose" size="22" color="#00BFAE" class="setting-icon"/> 修改昵称
+      </view>
+      <view class="setting-item" @click="showEditPwd = true">
+        <uni-icons type="locked" size="22" color="#00BFAE" class="setting-icon"/> 修改密码
+      </view>
+      <view class="setting-item" @click="showAbout = true">
+        <uni-icons type="help" size="22" color="#00BFAE" class="setting-icon"/> 关于/帮助
+      </view>
+    </view>
+    
+    <!-- 退出登录 -->
+    <button class="logout-btn" @click="logout">退出登录</button>
+    
+    <!-- 编辑昵称弹窗 -->
+    <view v-if="showEditName" class="popup-mask">
+      <view class="popup-panel">
+        <input v-model="editName" maxlength="16" placeholder="请输入新昵称" />
+        <view class="popup-btns">
+          <button @click="saveName" type="primary">保存</button>
+          <button @click="showEditName=false" type="default">取消</button>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 编辑密码弹窗 -->
+    <view v-if="showEditPwd" class="popup-mask">
+      <view class="popup-panel">
+        <input v-model="editPwd" type="password" maxlength="20" placeholder="请输入新密码" />
+        <view class="popup-btns">
+          <button @click="savePwd" type="primary">保存</button>
+          <button @click="showEditPwd=false" type="default">取消</button>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 关于弹窗 -->
+    <view v-if="showAbout" class="popup-mask">
+      <view class="popup-panel">
+        <view class="about-title">关于本应用</view>
+        <view class="about-text">
+          健身打卡助手，专为你的健康生活设计。<br>
+          记录、激励每一天的坚持！
+        </view>
+        <view class="popup-btns">
+          <button @click="showAbout=false" type="primary">关闭</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      avatar: '/static/avatar-default.png',
+      nickname: '未命名用户',
+      signature: '健康每一天！',
+      showEditName: false,
+      showEditPwd: false,
+      showAbout: false,
+      editName: '',
+      editPwd: '',
+      stats: { days: 0, streak: 0, duration: 0, bestStreak: 0 },
+      userId: '',
+      achievements: [] // 成就列表存储
+    };
+  },
+  onShow() {
+    const user = uni.getStorageSync('user');
+    if (user && user.username) {
+      this.userId = user.username;
+      this.loadProfile();
+      this.loadStats();
+      this.loadAchievements();
+    } else {
+      uni.redirectTo({ url: '/pages/login/login' });
+    }
+  },
+  methods: {
+    // 读取个人资料
+    loadProfile() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/profile?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          const data = res.data && res.data.profile ? res.data.profile : {};
+          if (data.nickname) this.nickname = data.nickname;
+          if (data.avatar) this.avatar = data.avatar;
+          if (data.signature) this.signature = data.signature;
+        }
+      });
+    },
+    // 修改昵称
+    saveName() {
+      if (!this.editName) {
+        uni.showToast({ title: '昵称不能为空', icon: 'none' });
+        return;
+      }
+      uni.request({
+        url: 'http://127.0.0.1:5000/api/profile',
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: {
+          user_id: this.userId,
+          nickname: this.editName
+        },
+        success: (res) => {
+          this.nickname = this.editName;
+          this.showEditName = false;
+          uni.showToast({ title: '昵称已修改', icon: 'success' });
+        }
+      });
+    },
+    // 修改密码
+    savePwd() {
+      if (!this.editPwd) {
+        uni.showToast({ title: '密码不能为空', icon: 'none' });
+        return;
+      }
+      uni.request({
+        url: 'http://127.0.0.1:5000/api/profile/password',
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: {
+          user_id: this.userId,
+          password: this.editPwd
+        },
+        success: (res) => {
+          uni.showToast({ title: '密码已修改', icon: 'success' });
+          this.showEditPwd = false;
+        }
+      });
+    },
+    // 修改头像
+    chooseAvatar() {
+      uni.chooseImage({
+        count: 1,
+        success: res => {
+          const avatarPath = res.tempFilePaths[0];
+          this.avatar = avatarPath;
+          uni.request({
+            url: 'http://127.0.0.1:5000/api/profile',
+            method: 'POST',
+            header: { 'Content-Type': 'application/json' },
+            data: {
+              user_id: this.userId,
+              avatar: avatarPath
+            },
+            success: () => {
+              uni.showToast({ title: '头像已修改', icon: 'success' });
+            }
+          });
+        }
+      });
+    },
+    // 退出登录
+    logout() {
+      uni.showModal({
+        title: '确认退出',
+        content: '确定要退出登录吗？',
+        confirmColor: '#ff5555',
+        success: res => {
+          if (res.confirm) {
+            uni.clearStorageSync();
+            uni.reLaunch({ url: '/pages/login/login' });
+          }
+        }
+      });
+    },
+    // 统计数据（打卡天数、连续天数等）
+    loadStats() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/punch?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          const punchDates = res.data && Array.isArray(res.data.punchDates) ? res.data.punchDates : [];
+          const days = punchDates.length;
+          let streak = 0, bestStreak = 0, last = '';
+          punchDates.sort();
+          punchDates.forEach(date => {
+            if (last && this.nextDay(last) === date) {
+              streak++;
+            } else {
+              streak = 1;
+            }
+            if (streak > bestStreak) bestStreak = streak;
+            last = date;
+          });
+          this.stats.days = days;
+          this.stats.streak = streak;
+          this.stats.duration = days; // 可改为累计时长
+          this.stats.bestStreak = bestStreak;
+        }
+      });
+    },
+    // 加载成就列表
+    loadAchievements() {
+      uni.request({
+        url: `http://127.0.0.1:5000/api/achievements?user_id=${this.userId}`,
+        method: 'GET',
+        success: (res) => {
+          this.achievements = res.data && Array.isArray(res.data.achievements) ? res.data.achievements : [];
+        }
+      });
+    },
+    nextDay(date) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    },
+    // 根据成就名称获取徽章图片路径
+    getBadgeImage(title) {
+      const titleToNumber = {
+        "首次打卡": "1",
+        "连续打卡3天": "3",
+        "连续打卡7天": "7",
+        "连续打卡10天": "10",
+        "连续打卡15天": "15",
+        "连续打卡30天": "30"
+      };
+      return `/static/${titleToNumber[title]}.png`;
+    }
+  }
+}
+</script>
+
+<style scoped>
+.user-center {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #d0f2f5 0%, #f9fafd 100%);
+  padding-bottom: 40px;
+}
+
+.profile-card {
+  margin: 0 8px;
+  margin-top: 0;
+  background: #fff;
+  border-bottom-left-radius: 32px;
+  border-bottom-right-radius: 32px;
+  box-shadow: 0 2px 18px rgba(0,191,174,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 36px 0 28px 0;
+  position: relative;
+}
+
+.profile-avatar-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 4px solid #26c6da;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(0,191,174,0.09);
+  margin-bottom: 10px;
+  object-fit: cover;
+}
+
+.nickname {
+  font-size: 28px;
+  font-weight: bold;
+  color: #222;
+  margin-top: 4px;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.edit-btn {
+  margin-top: 10px;
+  font-size: 15px;
+  color: #26c6da;
+  border: 2px solid #26c6da;
+  border-radius: 18px;
+  padding: 4px 25px;
+  background: #e0f7fa;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.signature {
+  margin-top: 18px;
+  color: #888;
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+/* 成就列表样式 */
+.achievements {
+  margin: 20px 18px 0 18px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(0,191,174,0.08);
+  overflow: hidden;
+}
+
+.achievement {
+  padding: 20px 18px;
+  font-size: 17px;
+  color: #222;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.achievement:last-child {
+  border-bottom: none;
+}
+
+.achievement-badge {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.badge-image {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.achievement-title {
+  font-weight: bold;
+  color: #00BFAE;
+}
+
+.achievement-description {
+  color: #555;
+  margin-top: 5px;
+}
+
+.achievement-date {
+  color: #888;
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+.no-achievements {
+  margin: 20px 18px 0 18px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(0,191,174,0.08);
+  padding: 20px 18px;
+  text-align: center;
+  color: #888;
+}
+
+.stats-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 18px;
+  margin: 32px 18px 0 18px;
+}
+
+.stat-card {
+  background: #fff;
+  border-radius: 22px;
+  box-shadow: 0 2px 10px rgba(0,191,174,0.08);
+  text-align: center;
+  padding: 24px 0 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: box-shadow 0.2s;
+  position: relative;
+}
+
+.stat-card::before {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #00BFAE 0%, #26C6DA 100%);
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.13;
+}
+
+.stat-num {
+  font-size: 32px;
+  font-weight: bold;
+  color: #00bfaf;
+  margin-bottom: 10px;
+  margin-top: 4px;
+  letter-spacing: 1px;
+}
+
+.stat-label {
+  font-size: 15px;
+  color: #888;
+  letter-spacing: 1px;
+}
+
+.settings {
+  margin: 36px 18px 0 18px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(0,191,174,0.08);
+  overflow: hidden;
+}
+
+.setting-item {
+  padding: 20px 18px;
+  font-size: 17px;
+  color: #222;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  transition: background 0.18s;
+}
+
+.setting-item:active {
+  background: #f1fcfc;
+}
+
+.setting-icon {
+  margin-right: 13px;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.logout-btn {
+  width: 80vw;
+  margin: 48px auto 0 auto;
+  background: linear-gradient(90deg, #ff5b5b 0%, #ff8a80 100%);
+  color: #fff;
+  font-size: 19px;
+  border-radius: 23px;
+  padding: 15px 0;
+  font-weight: bold;
+  letter-spacing: 2px;
+  box-shadow: 0 2px 10px rgba(255,91,91,0.13);
+  display: block;
+}
+
+.popup-mask {
+  position: fixed;
+  left: 0; top: 0; width: 100vw; height: 100vh;
+  background: rgba(34,34,34,0.22);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99;
+}
+
+.popup-panel {
+  background: #fff;
+  border-radius: 15px;
+  padding: 28px 24px;
+  min-width: 260px;
+  box-shadow: 0 2px 16px rgba(0,191,174,0.13);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.popup-panel input {
+  border: 1px solid #eee;
+  border-radius: 6px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 17px;
+  color: #222;
+  margin-bottom: 18px;
+}
+
+.popup-btns {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.popup-btns button {
+  flex: 1;
+  margin: 0 5px;
+}
+
+.about-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #00BFAE;
+  margin-bottom: 12px;
+  letter-spacing: 1.2px;
+}
+
+.about-text {
+  text-align: center;
+  font-size: 15px;
+  color: #555;
+  margin-bottom: 12px;
+  line-height: 1.7;
+}
+</style>

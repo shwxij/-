@@ -1,0 +1,82 @@
+{
+	"pages": [
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "uni-app x",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/plan/plan",
+			"style": {
+				"navigationBarTitleText": "数据分析"
+			}
+		},
+		{
+			"path": "pages/goal/goal",
+			"style": {
+				"navigationBarTitleText": "计划制定"
+			}
+		},
+		{
+			"path": "pages/user/user",
+			"style": {
+				"navigationBarTitleText": "个人中心"
+			}
+		},
+		{
+			"path": "pages/register/register",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "uni-app x",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	},
+	"tabBar": {
+		"color": "#666",
+		"selectedColor": "#00bfae",
+		"backgroundColor": "#fff",
+		"borderStyle": "black",
+		"list": [
+			{
+				"pagePath": "pages/index/index",
+				"iconPath": "static/index.png",
+				"selectedIconPath": "static/index1.png",
+				"text": "首页"
+			},
+			{
+				"pagePath": "pages/plan/plan",
+				"iconPath": "static/work.png",
+				"selectedIconPath": "static/work1.png",
+				"text": "数据"
+			},
+			{
+				"pagePath": "pages/goal/goal",
+				"iconPath": "static/map.png",
+				"selectedIconPath": "static/map1.png",
+				"text": "计划"
+			},
+			{
+				"pagePath": "pages/user/user",
+				"iconPath": "static/my.png",
+				"selectedIconPath": "static/my1.png",
+				"text": "个人"
+			}
+		]
+	},
+	"uniIdRouter": {}
+}

@@ -1,0 +1,211 @@
+<template>
+  <view class="login-page">
+    <view class="login-bg">
+      <image class="bg-circle bg-circle1" src="/static/circle1.png" mode="aspectFit"></image>
+      <image class="bg-circle bg-circle2" src="/static/circle2.png" mode="aspectFit"></image>
+    </view>
+    <view class="login-card">
+      <view class="login-header">
+        <image class="login-logo" src="/static/logo.png" mode="aspectFit"></image>
+        <view class="login-title">欢迎回来</view>
+        <view class="login-subtitle">请登录您的账户</view>
+      </view>
+      <view class="login-form">
+        <input class="login-input" v-model="username" placeholder="用户名" />
+        <input class="login-input" v-model="password" placeholder="密码" password />
+        <button class="login-btn" type="primary" @click="handleLogin">登录</button>
+        <view class="login-tip" v-if="errorMsg">{{ errorMsg }}</view>
+      </view>
+      <view class="login-footer">
+        <text>还没有账号？</text>
+        <text class="reg-link" @click="goRegister">去注册</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      username: '',
+      password: '',
+      errorMsg: ''
+    }
+  },
+  methods: {
+    handleLogin() {
+      if (!this.username || !this.password) {
+        this.errorMsg = '请输入用户名和密码'
+        return
+      }
+      // 发送登录请求到后端
+      uni.request({
+        url: 'http://127.0.0.1:5000/login', // 本地开发时使用本地接口
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: {
+          username: this.username,
+          password: this.password
+        },
+        success: (res) => {
+          if (res.data && res.data.msg === '登录成功') {
+            uni.setStorageSync('user', { username: this.username })
+            uni.showToast({ title: '登录成功', icon: 'success' })
+            setTimeout(() => {
+              uni.switchTab({ url: '/pages/index/index' })
+            }, 500)
+          } else {
+            this.errorMsg = res.data.msg || '用户名或密码错误'
+          }
+        },
+        fail: (err) => {
+          this.errorMsg = '网络错误，请检查后端是否启动'
+        }
+      })
+    },
+    goRegister() {
+      uni.navigateTo({ url: '/pages/register/register' })
+    }
+  }
+}
+</script>
+
+<style scoped>
+.login-page {
+  min-height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #d4f3fa 0%, #f5f5f5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.login-bg {
+  position: absolute;
+  left: 0; top: 0; width: 100vw; height: 100vh;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bg-circle {
+  position: absolute;
+  opacity: 0.33;
+}
+.bg-circle1 {
+  width: 180px;
+  height: 180px;
+  left: -60px;
+  top: -60px;
+}
+.bg-circle2 {
+  width: 130px;
+  height: 130px;
+  right: -40px;
+  bottom: -30px;
+}
+.login-card {
+  width: 88vw;
+  max-width: 370px;
+  background: #fff;
+  border-radius: 28px;
+  box-shadow: 0 8px 36px rgba(0,191,174,0.12);
+  padding: 36px 28px 26px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  z-index: 2;
+}
+.login-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.login-logo {
+  width: 68px;
+  height: 68px;
+  margin-bottom: 10px;
+  border-radius: 20px;
+  background: linear-gradient(120deg,#e0f7fa 20%, #fff 100%);
+  box-shadow: 0 2px 12px rgba(0,191,174,0.11);
+}
+.login-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #00bfae;
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.login-subtitle {
+  font-size: 15px;
+  color: #aaa;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.login-input {
+  border: none;
+  outline: none;
+  border-radius: 12px;
+  height: 44px;
+  padding: 0 16px;
+  font-size: 17px;
+  color: #333;
+  margin-bottom: 18px;
+  background: #f7fafc;
+  box-shadow: 0 2px 10px rgba(0,191,174,0.04);
+  transition: box-shadow 0.15s;
+}
+.login-input:focus {
+  box-shadow: 0 4px 18px rgba(0,191,174,0.13);
+  background: #f0fbfa;
+}
+.login-btn {
+  height: 44px;
+  border-radius: 13px;
+  background: linear-gradient(90deg, #00bfae 0%, #26c6da 100%);
+  color: #fff;
+  font-size: 19px;
+  font-weight: bold;
+  margin-top: 6px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 12px rgba(0,191,174,0.07);
+  letter-spacing: 1.5px;
+}
+.login-btn:active {
+  opacity: 0.9;
+}
+.login-tip {
+  color: #ff5b5b;
+  font-size: 15px;
+  text-align: center;
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+.login-footer {
+  margin-top: 2px;
+  text-align: center;
+  color: #aaa;
+  font-size: 15px;
+  letter-spacing: 1px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+.reg-link {
+  color: #00bfae;
+  margin-left: 5px;
+  font-weight: bold;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.reg-link:active {
+  color: #26c6da;
+}
+</style>

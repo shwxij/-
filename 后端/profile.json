@@ -1,0 +1,17 @@
+{
+  "123": {
+    "avatar": "blob:http://localhost:5173/8cd502a6-49ce-4b57-a7ec-360bf4652117",
+    "nickname": "暂无",
+    "bmi_height": 170,
+    "bmi_weight": 60,
+    "targetHeight": 170,
+    "targetWeight": 55,
+    "achievements": [
+      {
+        "title": "首次打卡",
+        "description": "恭喜你完成了首次打卡！",
+        "date": "2025-06-28"
+      }
+    ]
+  }
+}

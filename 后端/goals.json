@@ -1,0 +1,37 @@
+{
+  "123": [
+    {
+      "id": 1750251049702,
+      "start": "2025-05-30",
+      "end": "2025-06-22",
+      "project": "跑步",
+      "projectIndex": 0,
+      "amount": "6",
+      "unit": "km",
+      "remark": "",
+      "user_id": "123"
+    },
+    {
+      "id": 1750300796362,
+      "start": "2025-06-19",
+      "end": "",
+      "project": "跑步",
+      "projectIndex": 0,
+      "amount": "20",
+      "unit": "km",
+      "remark": "",
+      "user_id": "123"
+    },
+    {
+      "id": 1750646552263,
+      "start": "2025-06-23",
+      "end": "2525-07-01",
+      "project": "跳绳",
+      "projectIndex": 1,
+      "amount": "200",
+      "unit": "个",
+      "remark": "",
+      "user_id": "123"
+    }
+  ]
+}
